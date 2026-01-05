@@ -23,9 +23,7 @@ st.caption("Proactive GIS-based flood hotspot identification & verification")
 # --------------------------------------------------
 st.sidebar.header("Controls")
 
-# 🔴 THIS IS THE NEW SECTION YOU WERE MISSING
 st.sidebar.subheader("🌧️ Rainfall Source")
-
 mode = st.sidebar.radio(
     "Select rainfall input",
     ["Manual (Simulation)", "Live Weather API"]
@@ -44,7 +42,6 @@ if mode == "Live Weather API":
 
     if api_key:
         rain, rain_source = backend.get_live_rainfall(api_key)
-
         if rain is None:
             st.sidebar.warning("Weather API failed — using fallback")
             rain = st.sidebar.slider("Fallback Rainfall (mm/hr)", 0, 150, 20)
@@ -52,13 +49,10 @@ if mode == "Live Weather API":
         else:
             st.sidebar.success(f"Live Rainfall: {rain} mm/hr")
     else:
-        st.sidebar.info("Enter API key to enable live data")
         rain = st.sidebar.slider("Simulated Rainfall (mm/hr)", 0, 150, 20)
-
 else:
     rain = st.sidebar.slider("Simulated Rainfall (mm/hr)", 0, 150, 20)
 
-# OTHER INPUTS
 sms_text = st.sidebar.text_input("2G SMS Input (HELP / SOS)")
 
 camera_choice = st.sidebar.selectbox(
@@ -69,7 +63,7 @@ camera_choice = st.sidebar.selectbox(
 IMAGE_PATHS = {
     "Normal Road": "assets/normal.jpg",
     "Flooded Road": "assets/flood.jpg",
-    "Heavy Flood": "assets/heavy.jpg"
+    "Heavy Flood": "assets/warning.jpg"
 }
 
 image_path = IMAGE_PATHS[camera_choice]
@@ -115,18 +109,28 @@ data["color"] = data["risk"].apply(risk_color)
 vision = backend.analyze_image(image_path)
 sms_active = backend.sms_trigger(sms_text)
 
-verified = vision["status"] == "CRITICAL" or sms_active
-predicted = rain > 80
+# --------------------------------------------------
+# SYSTEM STATE (FIXED PRIORITY LOGIC)
+# --------------------------------------------------
+if sms_active:
+    system_state = "CRITICAL"
+elif vision["status"] == "CRITICAL":
+    system_state = "CRITICAL"
+elif vision["status"] == "WARNING":
+    system_state = "WARNING"
+elif rain > 80:
+    system_state = "PREDICTED"
+else:
+    system_state = "SAFE"
 
-# --------------------------------------------------
-# SYSTEM STATUS
-# --------------------------------------------------
 st.subheader("🚦 System Status")
 
-if verified:
+if system_state == "CRITICAL":
     st.error("🔴 VERIFIED FLOOD — DEPLOY PUMPS IMMEDIATELY")
-elif predicted:
-    st.warning("🟠 HIGH RISK — PREPARE RESOURCES")
+elif system_state == "WARNING":
+    st.warning("🟠 FLOOD DETECTED — PREPARE RESOURCES")
+elif system_state == "PREDICTED":
+    st.warning("🟡 HIGH RISK — FLOOD LIKELY SOON")
 else:
     st.success("🟢 NO FLOOD DETECTED — NORMAL CONDITIONS")
 
@@ -174,30 +178,6 @@ c1, c2 = st.columns(2)
 c1.metric("Estimated Water Depth (ft)", vision["depth"])
 c2.metric("Occlusion", f"{int(vision['occlusion']*100)}%")
 
-# --------------------------------------------------
-# REAL-WORLD EXPLANATION
-# --------------------------------------------------
-st.markdown("### 🧠 How This Works in Real Deployment")
 
-st.markdown("""
-**Before Rain (3–6 hrs prior)**  
-• Live weather ingested automatically  
-• Low-lying wards flagged in advance  
-• Pumps & teams pre-positioned  
-
-**During Rainfall**  
-• Risk bars rise dynamically  
-• CCTV confirms real flooding  
-• Alerts escalate only when verified  
-
-**If Internet Fails**  
-• Citizens send **HELP** via 2G SMS  
-• SOS pin triggers response  
-
-**Outcome:**  
-✅ Proactive planning  
-✅ Faster response  
-✅ No traffic collapse
-""")
 
 
